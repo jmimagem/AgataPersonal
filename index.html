@@ -445,6 +445,8 @@ tr.row-bloqueado:hover td { opacity:.7; }
 .upcoming-item small { color:var(--text-muted); display:block; }
 .badge-entrada { background:var(--paid-bg); color:var(--paid); }
 .badge-saida { background:var(--overdue-bg); color:var(--overdue); }
+.btn-pagar { background:var(--pending); color:#050505; border:none; border-radius:var(--radius-sm); padding:6px 14px; font-family:inherit; font-size:.8rem; font-weight:700; cursor:pointer; transition:opacity .2s; }
+.btn-pagar:hover { opacity:.85; }
 .chk { width:20px; height:20px; accent-color:var(--paid); cursor:pointer; }
 .form-check { display:flex; align-items:center; gap:8px; font-size:.88rem; margin-bottom:14px; color:var(--text-secondary); }
 .form-check input { width:auto; }
@@ -1685,7 +1687,7 @@ function renderGastos() {
       <div><strong>${esc(g.descricao)}</strong>${g.totalParcelas ? ` <span style="color:var(--text-muted)">${g.parcela}/${g.totalParcelas}</span>` : (g.fixo ? ' <span style="color:var(--text-muted)">fixo</span>' : '')}
         <small style="${g.data < hoje ? 'color:var(--overdue)' : ''}">${fmtDate(g.data)} · ${esc(g.categoria || '')}</small></div>
       <div style="display:flex;gap:10px;align-items:center;"><span>${formatCurrency(g.valor)}</span>
-      <button class="btn-pay" onclick="togglePago('${g.id}')">Pago ✓</button></div>
+      <button class="btn-pagar" onclick="pagarGasto('${g.id}')">Pagar</button></div>
     </div>`).join('') : '<div class="allgood-state">Nada pendente ✓</div>';
 
   renderGastosChart();
@@ -1792,6 +1794,15 @@ async function togglePago(id) {
     await db.collection('gastos').doc(id).update({ pago });
     g.pago = pago; renderGastos();
   } catch (e) { console.error(e); showToast('Erro ao atualizar', 'error'); renderGastos(); }
+}
+
+async function pagarGasto(id) {
+  const g = allGastos.find(x => x.id === id); if (!g || g.pago) return;
+  try {
+    await db.collection('gastos').doc(id).update({ pago: true, dataPagamento: todayISO() });
+    g.pago = true; g.dataPagamento = todayISO(); renderGastos();
+    showToast(`${g.descricao} — pago`);
+  } catch (e) { console.error(e); showToast('Erro ao registrar pagamento', 'error'); }
 }
 
 async function deleteGasto(id) {
