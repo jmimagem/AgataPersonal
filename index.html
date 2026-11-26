@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Personal Control</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#050505">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Personal Control">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -422,6 +430,27 @@ tr.row-bloqueado:hover td { opacity:.7; }
 .aluno-card-pay-row input:focus { border-color:var(--accent); }
 .aluno-card-pay-row button { padding:10px 16px; font-size:.88rem; white-space:nowrap; }
 
+/* ── Gastos ── */
+.subtabs { display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap; }
+.pill { background:var(--surface); border:1px solid var(--border); color:var(--text-secondary); padding:7px 16px; border-radius:20px; font-family:inherit; font-size:.85rem; cursor:pointer; transition:all .2s; }
+.pill.active { background:var(--accent-dim); border-color:var(--accent); color:var(--accent); }
+.cat-row { margin-bottom:12px; }
+.cat-head { display:flex; justify-content:space-between; font-size:.88rem; margin-bottom:5px; gap:8px; }
+.cat-head span:last-child { color:var(--text-secondary); white-space:nowrap; }
+.cat-bar { height:8px; background:var(--surface); border-radius:6px; overflow:hidden; }
+.cat-bar div { height:100%; background:var(--accent); border-radius:6px; }
+.panel { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:20px 22px; }
+.upcoming-item { display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--border); font-size:.88rem; gap:10px; }
+.upcoming-item:last-child { border-bottom:none; }
+.upcoming-item small { color:var(--text-muted); display:block; }
+.badge-entrada { background:var(--paid-bg); color:var(--paid); }
+.badge-saida { background:var(--overdue-bg); color:var(--overdue); }
+.chk { width:20px; height:20px; accent-color:var(--paid); cursor:pointer; }
+.form-check { display:flex; align-items:center; gap:8px; font-size:.88rem; margin-bottom:14px; color:var(--text-secondary); }
+.form-check input { width:auto; }
+.hint { font-size:.75rem; color:var(--text-muted); margin-top:4px; }
+@media (max-width:768px){ #gastosTable th:nth-child(5), #gastosTable td:nth-child(5){ display:none; } }
+
 /* ── Responsive ── */
 @media (max-width:900px) {
   .dash-grid { grid-template-columns:1fr; }
@@ -490,6 +519,7 @@ tr.row-bloqueado:hover td { opacity:.7; }
       <div class="topbar-title">Personal Control<span>BETA</span></div>
     </div>
     <div class="topbar-right">
+      <button class="btn-logout" id="btnInstall" style="display:none;border-color:var(--accent);color:var(--accent);" onclick="installApp()">Instalar app</button>
       <span class="user-name" id="userName"></span>
       <button class="btn-logout" onclick="doLogout()">Sair</button>
     </div>
@@ -499,6 +529,7 @@ tr.row-bloqueado:hover td { opacity:.7; }
     <div class="tab active" data-tab="dashboard">Painel</div>
     <div class="tab" data-tab="alunos">Alunos</div>
     <div class="tab" data-tab="financeiro">Financeiro</div>
+    <div class="tab" data-tab="gastos">Gastos</div>
   </div>
 
   <!-- ── Dashboard ── -->
@@ -595,6 +626,62 @@ tr.row-bloqueado:hover td { opacity:.7; }
       <p>Nenhum aluno ativo neste mês</p>
     </div>
   </div>
+  <!-- ── Gastos ── -->
+  <div class="tab-content" id="tab-gastos">
+    <div class="month-nav">
+      <button onclick="changeGastosMonth(-1)">‹</button>
+      <div class="month-label" id="gastosMonthLabel"></div>
+      <button onclick="changeGastosMonth(1)">›</button>
+    </div>
+    <div class="toolbar">
+      <div class="subtabs" style="margin:0;">
+        <button class="pill active" data-gview="panorama" onclick="setGastosView('panorama')">Panorama</button>
+        <button class="pill" data-gview="lancamentos" onclick="setGastosView('lancamentos')">Lançamentos</button>
+      </div>
+      <div class="toolbar-left">
+        <button class="btn-secondary" onclick="openRecModal()">+ Parcelado / Fixo</button>
+        <button class="btn-primary" onclick="openGastoModal()">+ Lançamento</button>
+      </div>
+    </div>
+
+    <div id="gview-panorama">
+      <div class="kpi-row" id="gKpis"></div>
+      <div class="dash-grid">
+        <div>
+          <div class="section-title">Gastos por categoria</div>
+          <div class="panel" id="gCats"></div>
+        </div>
+        <div>
+          <div class="section-title">Pago x a pagar por mês</div>
+          <div class="chart-container"><canvas id="gastosChart"></canvas></div>
+        </div>
+      </div>
+      <div class="section-title">Próximos a pagar</div>
+      <div class="panel" id="gUpcoming"></div>
+    </div>
+
+    <div id="gview-lancamentos" style="display:none;">
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <input class="search-input" type="text" id="gSearch" placeholder="Buscar descrição...">
+          <select class="filter-select" id="gFilterCat"><option value="">Todas categorias</option></select>
+          <select class="filter-select" id="gFilterPago">
+            <option value="">Pago e pendente</option><option value="1">Só pagos</option><option value="0">Só pendentes</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="gastosTable">
+          <thead><tr>
+            <th>Data</th><th>Descrição</th><th>Categoria</th><th>Tipo</th><th>Forma</th>
+            <th style="text-align:right">Valor</th><th>Pago?</th><th>Parcela</th><th style="text-align:right">Ações</th>
+          </tr></thead>
+          <tbody id="gastosBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <!-- ═══ MODAL: Aluno ═══ -->
@@ -686,6 +773,68 @@ tr.row-bloqueado:hover td { opacity:.7; }
   </div>
 </div>
 
+<!-- ═══ MODAL: Gasto ═══ -->
+<div class="modal-overlay" id="modalGasto">
+  <div class="modal">
+    <h2 id="modalGastoTitle">Novo Lançamento</h2>
+    <input type="hidden" id="gastoId">
+    <div class="form-row">
+      <div class="form-group"><label>Data</label><input type="date" id="gastoData"></div>
+      <div class="form-group"><label>Tipo</label>
+        <select id="gastoTipo"><option value="Saída">Saída</option><option value="Entrada">Entrada</option></select></div>
+    </div>
+    <div class="form-group"><label>Descrição</label><input type="text" id="gastoDesc" placeholder="Ex: Seguro"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Categoria</label><input type="text" id="gastoCat" list="catList" placeholder="Escolha ou digite"></div>
+      <div class="form-group"><label>Valor (R$)</label><input type="number" id="gastoValor" step="0.01" placeholder="0.00"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Forma de pagamento</label>
+        <select id="gastoForma"><option>Débito</option><option>Crédito</option><option>Pix</option><option>Dinheiro</option><option>Boleto</option></select></div>
+      <div class="form-group"><label>Conta/Cartão</label><input type="text" id="gastoConta" placeholder="Opcional"></div>
+    </div>
+    <div class="form-group"><label>Observações</label><input type="text" id="gastoObs" placeholder="Opcional"></div>
+    <label class="form-check"><input type="checkbox" id="gastoPago" class="chk"> Já pago</label>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('modalGasto')">Cancelar</button>
+      <button class="btn-primary" onclick="saveGasto()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: Parcelado / Fixo ═══ -->
+<div class="modal-overlay" id="modalRec">
+  <div class="modal">
+    <h2>Lançar Parcelado / Fixo</h2>
+    <div class="form-group"><label>Modo</label>
+      <select id="recModo" onchange="recModoChange()">
+        <option value="parcelado">Compra parcelada (N parcelas)</option>
+        <option value="fixo">Gasto fixo mensal (telefone, assinatura...)</option>
+      </select></div>
+    <div class="form-group"><label>Descrição</label><input type="text" id="recDesc" placeholder="Ex: iPhone"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Categoria</label><input type="text" id="recCat" list="catList" placeholder="Escolha ou digite"></div>
+      <div class="form-group"><label>Valor mensal/parcela (R$)</label><input type="number" id="recValor" step="0.01" placeholder="0.00"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Data da primeira</label><input type="date" id="recData"></div>
+      <div class="form-group"><label>Forma</label>
+        <select id="recForma"><option>Débito</option><option>Crédito</option><option>Pix</option><option>Dinheiro</option><option>Boleto</option></select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label id="recQtdLabel">Total de parcelas</label><input type="number" id="recQtd" min="1" max="120" value="12"></div>
+      <div class="form-group" id="recIniWrap"><label>Parcela inicial</label><input type="number" id="recIni" min="1" value="1">
+        <div class="hint">Use se a compra já está em andamento (ex: começar na 3)</div></div>
+    </div>
+    <label class="form-check"><input type="checkbox" id="recPrimeiraPaga" class="chk"> Primeira já paga</label>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('modalRec')">Cancelar</button>
+      <button class="btn-primary" onclick="saveRec()">Gerar lançamentos</button>
+    </div>
+  </div>
+</div>
+<datalist id="catList"></datalist>
+
 <!-- ═══ Toast ═══ -->
 <div class="toast" id="toast"></div>
 
@@ -770,6 +919,12 @@ async function loadData() {
     allAlunos = alunosSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     allPagamentos = pagamentosSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     allAlunos.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+    try {
+      const gs = await db.collection('gastos').get();
+      allGastos = gs.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+      console.error(e); showToast('Sem acesso à coleção "gastos" — ajuste as regras do Firestore', 'error');
+    }
     renderAll();
   } catch (err) {
     console.error('Erro ao carregar dados:', err);
@@ -781,6 +936,7 @@ function renderAll() {
   renderDashboard();
   renderAlunos();
   renderFinanceiro();
+  renderGastos();
 }
 
 // ╔══════════════════════════════════════════════════════════════╗
@@ -1453,6 +1609,263 @@ async function removePayment(payId) {
     console.error(err);
     showToast('Erro ao remover', 'error');
   }
+}
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  GASTOS                                                      ║
+// ╚══════════════════════════════════════════════════════════════╝
+const CATEGORIAS_BASE = ['Cartão/Parcelas','Transporte/Combustível','Saúde','Moradia','Alimentação','Contas Fixas','Educação','Lazer','Outras entradas','Outros'];
+let allGastos = [];
+let gastosMonth = currentMonth;
+let gastosView = 'panorama';
+let gastosChart = null;
+
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(iso) { if (!iso) return '—'; const [y,m,d] = iso.split('-'); return `${d}/${m}/${y}`; }
+function todayISO() { const n = new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); }
+function addMonthsISO(iso, n) {
+  const [y,m,d] = iso.split('-').map(Number);
+  const t = new Date(y, m - 1 + n, 1);
+  const last = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate();
+  return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(Math.min(d,last)).padStart(2,'0');
+}
+function shiftMonth(ym, n) { const [y,m] = ym.split('-').map(Number); const d = new Date(y, m-1+n, 1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function allCategorias() {
+  return [...new Set([...CATEGORIAS_BASE, ...allGastos.map(g => g.categoria).filter(Boolean)])].sort((a,b) => a.localeCompare(b));
+}
+
+function changeGastosMonth(dir) { gastosMonth = shiftMonth(gastosMonth, dir); renderGastos(); }
+function setGastosView(v) {
+  gastosView = v;
+  document.querySelectorAll('[data-gview]').forEach(b => b.classList.toggle('active', b.dataset.gview === v));
+  document.getElementById('gview-panorama').style.display = v === 'panorama' ? 'block' : 'none';
+  document.getElementById('gview-lancamentos').style.display = v === 'lancamentos' ? 'block' : 'none';
+  renderGastos();
+}
+
+function renderGastos() {
+  document.getElementById('gastosMonthLabel').textContent = formatMonthLabel(gastosMonth);
+  const cats = allCategorias();
+  document.getElementById('catList').innerHTML = cats.map(c => `<option value="${esc(c)}">`).join('');
+  const fc = document.getElementById('gFilterCat'); const cur = fc.value;
+  fc.innerHTML = '<option value="">Todas categorias</option>' + cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  fc.value = cur;
+
+  const doMes = allGastos.filter(g => (g.data || '').slice(0,7) === gastosMonth);
+  const saidas = doMes.filter(g => g.tipo !== 'Entrada');
+  const entradas = doMes.filter(g => g.tipo === 'Entrada');
+  const sum = a => a.reduce((s,g) => s + (g.valor || 0), 0);
+  const totSaidas = sum(saidas), totEntradas = sum(entradas);
+  const aPagarMes = sum(saidas.filter(g => !g.pago));
+  const aPagarTotal = sum(allGastos.filter(g => g.tipo !== 'Entrada' && !g.pago));
+  const futuro = sum(allGastos.filter(g => g.tipo !== 'Entrada' && !g.pago && (g.data || '').slice(0,7) > gastosMonth));
+  const saldo = totEntradas - totSaidas;
+
+  document.getElementById('gKpis').innerHTML = `
+    <div class="kpi-card danger"><div class="kpi-label">Saídas do mês</div><div class="kpi-value">${formatCurrency(totSaidas)}</div><div class="kpi-sub">${saidas.length} lançamento(s)</div></div>
+    <div class="kpi-card success"><div class="kpi-label">Entradas do mês</div><div class="kpi-value">${formatCurrency(totEntradas)}</div><div class="kpi-sub">saldo ${formatCurrency(saldo)}</div></div>
+    <div class="kpi-card"><div class="kpi-label">A pagar no mês</div><div class="kpi-value" style="color:var(--pending)">${formatCurrency(aPagarMes)}</div><div class="kpi-sub">pago ${formatCurrency(totSaidas - aPagarMes)}</div></div>
+    <div class="kpi-card accent"><div class="kpi-label">Total ainda a pagar</div><div class="kpi-value">${formatCurrency(aPagarTotal)}</div><div class="kpi-sub">${formatCurrency(futuro)} nos meses seguintes</div></div>`;
+
+  // categorias
+  const byCat = {};
+  saidas.forEach(g => { const c = g.categoria || 'Sem categoria'; byCat[c] = (byCat[c] || 0) + (g.valor || 0); });
+  const catArr = Object.entries(byCat).sort((a,b) => b[1] - a[1]);
+  const max = catArr.length ? catArr[0][1] : 1;
+  document.getElementById('gCats').innerHTML = catArr.length ? catArr.map(([c,v]) => `
+    <div class="cat-row"><div class="cat-head"><span>${esc(c)}</span><span>${formatCurrency(v)} · ${totSaidas ? Math.round(v/totSaidas*100) : 0}%</span></div>
+    <div class="cat-bar"><div style="width:${v/max*100}%"></div></div></div>`).join('')
+    : '<div class="allgood-state">Sem saídas neste mês</div>';
+
+  // próximos a pagar
+  const pend = allGastos.filter(g => g.tipo !== 'Entrada' && !g.pago).sort((a,b) => (a.data||'').localeCompare(b.data||'')).slice(0, 12);
+  const hoje = todayISO();
+  document.getElementById('gUpcoming').innerHTML = pend.length ? pend.map(g => `
+    <div class="upcoming-item">
+      <div><strong>${esc(g.descricao)}</strong>${g.totalParcelas ? ` <span style="color:var(--text-muted)">${g.parcela}/${g.totalParcelas}</span>` : (g.fixo ? ' <span style="color:var(--text-muted)">fixo</span>' : '')}
+        <small style="${g.data < hoje ? 'color:var(--overdue)' : ''}">${fmtDate(g.data)} · ${esc(g.categoria || '')}</small></div>
+      <div style="display:flex;gap:10px;align-items:center;"><span>${formatCurrency(g.valor)}</span>
+      <button class="btn-pay" onclick="togglePago('${g.id}')">Pago ✓</button></div>
+    </div>`).join('') : '<div class="allgood-state">Nada pendente ✓</div>';
+
+  renderGastosChart();
+  renderGastosTable();
+}
+
+function renderGastosChart() {
+  const months = []; for (let i = -5; i <= 6; i++) months.push(shiftMonth(gastosMonth, i));
+  const mn = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const labels = months.map(m => mn[parseInt(m.split('-')[1]) - 1] + '/' + m.slice(2,4));
+  const pick = (m, pago) => allGastos.filter(g => g.tipo !== 'Entrada' && (g.data||'').slice(0,7) === m && !!g.pago === pago).reduce((s,g) => s + (g.valor||0), 0);
+  const ctx = document.getElementById('gastosChart').getContext('2d');
+  if (gastosChart) gastosChart.destroy();
+  gastosChart = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [
+      { label: 'Pago', data: months.map(m => pick(m, true)), backgroundColor: '#00E5CC', borderRadius: 4 },
+      { label: 'A pagar', data: months.map(m => pick(m, false)), backgroundColor: '#FFB300', borderRadius: 4 }
+    ]},
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#888', font: { family: 'Outfit', size: 11 } } },
+        tooltip: { callbacks: { label: c => c.dataset.label + ': R$ ' + c.parsed.y.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) } } },
+      scales: { x: { stacked: true, grid: { color: '#ffffff08' }, ticks: { color: '#666', font: { family: 'Outfit', size: 11 } } },
+        y: { stacked: true, grid: { color: '#ffffff08' }, ticks: { color: '#666', font: { family: 'Outfit', size: 11 }, callback: v => 'R$ ' + v.toLocaleString('pt-BR') } } } }
+  });
+}
+
+function renderGastosTable() {
+  const q = (document.getElementById('gSearch').value || '').toLowerCase();
+  const fcat = document.getElementById('gFilterCat').value;
+  const fpago = document.getElementById('gFilterPago').value;
+  const list = allGastos.filter(g => (g.data||'').slice(0,7) === gastosMonth)
+    .filter(g => !q || (g.descricao||'').toLowerCase().includes(q))
+    .filter(g => !fcat || g.categoria === fcat)
+    .filter(g => fpago === '' || (fpago === '1') === !!g.pago)
+    .sort((a,b) => (a.data||'').localeCompare(b.data||''));
+  document.getElementById('gastosBody').innerHTML = list.length ? list.map(g => `
+    <tr>
+      <td>${fmtDate(g.data)}</td>
+      <td style="font-weight:500;">${esc(g.descricao)}</td>
+      <td>${esc(g.categoria || '')}</td>
+      <td><span class="badge ${g.tipo === 'Entrada' ? 'badge-entrada' : 'badge-saida'}">${esc(g.tipo || 'Saída')}</span></td>
+      <td>${esc(g.forma || '')}</td>
+      <td style="text-align:right;">${formatCurrency(g.valor)}</td>
+      <td><input type="checkbox" class="chk" ${g.pago ? 'checked' : ''} onchange="togglePago('${g.id}')"></td>
+      <td>${g.totalParcelas ? g.parcela + '/' + g.totalParcelas : (g.fixo ? 'fixo' : '')}</td>
+      <td style="text-align:right"><div class="actions-cell" style="justify-content:flex-end;">
+        <button class="btn-secondary btn-sm" onclick="editGasto('${g.id}')">Editar</button>
+        <button class="btn-danger btn-sm" onclick="deleteGasto('${g.id}')">Excluir</button></div></td>
+    </tr>`).join('') : '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:40px;">Nenhum lançamento neste mês</td></tr>';
+}
+['gSearch','gFilterCat','gFilterPago'].forEach(id => { document.getElementById(id).addEventListener('input', renderGastosTable); });
+
+function openGastoModal(g = null) {
+  document.getElementById('modalGastoTitle').textContent = g ? 'Editar Lançamento' : 'Novo Lançamento';
+  document.getElementById('gastoId').value = g ? g.id : '';
+  document.getElementById('gastoData').value = g ? g.data : todayISO();
+  document.getElementById('gastoTipo').value = g ? (g.tipo || 'Saída') : 'Saída';
+  document.getElementById('gastoDesc').value = g ? g.descricao : '';
+  document.getElementById('gastoCat').value = g ? (g.categoria || '') : '';
+  document.getElementById('gastoValor').value = g ? g.valor : '';
+  document.getElementById('gastoForma').value = g ? (g.forma || 'Débito') : 'Débito';
+  document.getElementById('gastoConta').value = g ? (g.conta || '') : '';
+  document.getElementById('gastoObs').value = g ? (g.obs || '') : '';
+  document.getElementById('gastoPago').checked = g ? !!g.pago : true;
+  openModal('modalGasto');
+}
+function editGasto(id) { const g = allGastos.find(x => x.id === id); if (g) openGastoModal(g); }
+
+async function saveGasto() {
+  const id = document.getElementById('gastoId').value;
+  const data = {
+    data: document.getElementById('gastoData').value,
+    tipo: document.getElementById('gastoTipo').value,
+    descricao: document.getElementById('gastoDesc').value.trim(),
+    categoria: document.getElementById('gastoCat').value.trim(),
+    valor: parseFloat(document.getElementById('gastoValor').value) || 0,
+    forma: document.getElementById('gastoForma').value,
+    conta: document.getElementById('gastoConta').value.trim(),
+    obs: document.getElementById('gastoObs').value.trim(),
+    pago: document.getElementById('gastoPago').checked,
+  };
+  if (!data.data || !data.descricao || data.valor <= 0) { showToast('Preencha data, descrição e valor', 'error'); return; }
+  try {
+    if (id) {
+      await db.collection('gastos').doc(id).update(data);
+      const i = allGastos.findIndex(g => g.id === id); if (i >= 0) allGastos[i] = { ...allGastos[i], ...data };
+      showToast('Lançamento atualizado');
+    } else {
+      data.criadoEm = firebase.firestore.FieldValue.serverTimestamp();
+      const ref = await db.collection('gastos').add(data);
+      allGastos.push({ id: ref.id, ...data });
+      showToast('Lançamento adicionado');
+    }
+    gastosMonth = data.data.slice(0,7);
+    closeModal('modalGasto'); renderGastos();
+  } catch (e) { console.error(e); showToast('Erro ao salvar', 'error'); }
+}
+
+async function togglePago(id) {
+  const g = allGastos.find(x => x.id === id); if (!g) return;
+  const pago = !g.pago;
+  try {
+    await db.collection('gastos').doc(id).update({ pago });
+    g.pago = pago; renderGastos();
+  } catch (e) { console.error(e); showToast('Erro ao atualizar', 'error'); renderGastos(); }
+}
+
+async function deleteGasto(id) {
+  const g = allGastos.find(x => x.id === id); if (!g) return;
+  if (!confirm(`Excluir "${g.descricao}"?`)) return;
+  let ids = [id];
+  if (g.grupoId) {
+    const prox = allGastos.filter(x => x.grupoId === g.grupoId && x.id !== id && x.data > g.data);
+    if (prox.length && confirm(`Excluir também as ${prox.length} parcela(s)/lançamento(s) seguintes deste grupo?`)) ids = ids.concat(prox.map(x => x.id));
+  }
+  try {
+    const batch = db.batch(); ids.forEach(i => batch.delete(db.collection('gastos').doc(i))); await batch.commit();
+    allGastos = allGastos.filter(x => !ids.includes(x.id));
+    renderGastos(); showToast(ids.length > 1 ? `${ids.length} lançamentos excluídos` : 'Lançamento excluído');
+  } catch (e) { console.error(e); showToast('Erro ao excluir', 'error'); }
+}
+
+function recModoChange() {
+  const fixo = document.getElementById('recModo').value === 'fixo';
+  document.getElementById('recQtdLabel').textContent = fixo ? 'Repetir por quantos meses' : 'Total de parcelas';
+  document.getElementById('recIniWrap').style.display = fixo ? 'none' : 'block';
+}
+function openRecModal() {
+  ['recDesc','recCat','recValor'].forEach(i => document.getElementById(i).value = '');
+  document.getElementById('recModo').value = 'parcelado';
+  document.getElementById('recData').value = todayISO();
+  document.getElementById('recQtd').value = 12; document.getElementById('recIni').value = 1;
+  document.getElementById('recPrimeiraPaga').checked = false;
+  recModoChange(); openModal('modalRec');
+}
+
+async function saveRec() {
+  const fixo = document.getElementById('recModo').value === 'fixo';
+  const desc = document.getElementById('recDesc').value.trim();
+  const valor = parseFloat(document.getElementById('recValor').value) || 0;
+  const data0 = document.getElementById('recData').value;
+  const qtd = parseInt(document.getElementById('recQtd').value) || 0;
+  const ini = fixo ? 1 : (parseInt(document.getElementById('recIni').value) || 1);
+  if (!desc || valor <= 0 || !data0 || qtd < 1 || ini > qtd) { showToast('Confira os campos', 'error'); return; }
+  const grupoId = 'g' + Date.now().toString(36);
+  const total = fixo ? qtd : qtd - ini + 1;
+  const primeiraPaga = document.getElementById('recPrimeiraPaga').checked;
+  const batch = db.batch(); const novos = [];
+  for (let i = 0; i < total; i++) {
+    const item = {
+      data: addMonthsISO(data0, i), tipo: 'Saída', descricao: desc,
+      categoria: document.getElementById('recCat').value.trim() || (fixo ? 'Contas Fixas' : 'Cartão/Parcelas'),
+      forma: document.getElementById('recForma').value, conta: '', obs: '', valor,
+      pago: i === 0 && primeiraPaga, grupoId,
+      criadoEm: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    if (fixo) item.fixo = true; else { item.parcela = ini + i; item.totalParcelas = qtd; }
+    const ref = db.collection('gastos').doc(); batch.set(ref, item); novos.push({ id: ref.id, ...item });
+  }
+  try {
+    await batch.commit(); allGastos.push(...novos);
+    gastosMonth = data0.slice(0,7); closeModal('modalRec'); renderGastos();
+    showToast(`${total} lançamentos gerados`);
+  } catch (e) { console.error(e); showToast('Erro ao gerar lançamentos', 'error'); }
+}
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  PWA                                                         ║
+// ╚══════════════════════════════════════════════════════════════╝
+if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(console.error));
+let deferredInstall = null;
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; document.getElementById('btnInstall').style.display = 'inline-block'; });
+window.addEventListener('appinstalled', () => { document.getElementById('btnInstall').style.display = 'none'; deferredInstall = null; });
+if (isIOS && !isStandalone) document.getElementById('btnInstall').style.display = 'inline-block';
+async function installApp() {
+  if (deferredInstall) { deferredInstall.prompt(); await deferredInstall.userChoice; deferredInstall = null; document.getElementById('btnInstall').style.display = 'none'; }
+  else if (isIOS) alert('No iPhone: toque em Compartilhar (ícone ⬆︎) e depois em "Adicionar à Tela de Início".');
 }
 
 // ╔══════════════════════════════════════════════════════════════╗
